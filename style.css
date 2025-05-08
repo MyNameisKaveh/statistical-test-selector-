@@ -1,0 +1,321 @@
+:root {
+    --primary-color: #005A9C; /* یک آبی تیره‌تر و رسمی‌تر */
+    --secondary-color: #6c757d; /* خاکستری استاندارد */
+    --accent-color: #FFC107; /* زرد برای تاکید (مثلا هاور دکمه‌ها) */
+    --background-color: #f4f6f8; /* یک خاکستری خیلی روشن برای پس‌زمینه */
+    --text-color: #333; /* مشکی تیره‌تر برای متن اصلی */
+    --card-bg-color: #ffffff; /* سفید برای کارت‌ها */
+    --border-color: #ced4da; /* خاکستری روشن‌تر برای حاشیه‌ها */
+    --success-color: #28a745; /* سبز برای موفقیت */
+    --danger-color: #dc3545; /* قرمز برای خطا */
+    --font-family: 'Vazirmatn', Arial, sans-serif; /* فونت وزیرمتن به عنوان اولویت */
+    --code-font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    --box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    --border-radius: 8px;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-family);
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    font-size: 16px; /* اندازه فونت پایه */
+}
+
+header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1.5em 1em;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+header h1 {
+    margin: 0 0 0.25em 0;
+    font-size: 2em; /* کمی بزرگتر */
+    font-weight: 700;
+}
+
+header p {
+    margin: 0;
+    font-size: 1em;
+    opacity: 0.9;
+}
+
+header a {
+    color: var(--accent-color); /* رنگ زرد برای لینک */
+    text-decoration: none;
+    font-weight: bold;
+}
+
+header a:hover {
+    text-decoration: underline;
+}
+
+main {
+    flex: 1; /* باعث می‌شود main تمام فضای باقی‌مانده را بگیرد */
+    max-width: 900px; /* کمی پهن‌تر برای خوانایی بهتر */
+    width: 90%; /* برای صفحه‌های کوچکتر */
+    margin: 2em auto;
+    padding: 2em;
+    background-color: var(--card-bg-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+}
+
+#question-container, #result-container {
+    padding: 1.5em;
+    margin-bottom: 2em; /* فاصله بیشتر بین بخش‌ها */
+}
+
+#question-text {
+    font-size: 1.5em; /* بزرگتر برای تاکید */
+    color: var(--primary-color);
+    margin-bottom: 1.2em;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+#options-container button {
+    display: block;
+    width: 100%;
+    padding: 0.8em 1.2em;
+    margin-bottom: 0.8em;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.05em; /* کمی بزرگتر برای خوانایی گزینه‌ها */
+    font-family: var(--font-family);
+    transition: background-color 0.2s ease-in-out, transform 0.1s ease;
+    text-align: right;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+#options-container button:hover {
+    background-color: #004a80; /* آبی تیره‌تر برای هاور */
+    transform: translateY(-2px); /* کمی حرکت به بالا */
+}
+
+#options-container button:active {
+    transform: translateY(0px); /* بازگشت به حالت عادی در کلیک */
+}
+
+#reset-button {
+    display: block; /* برای نمایش دکمه */
+    width: auto; /* عرض خودکار بر اساس محتوا */
+    min-width: 150px;
+    padding: 0.7em 1.5em;
+    margin: 2em auto 0; /* وسط چین و با فاصله از بالا */
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    font-family: var(--font-family);
+    transition: background-color 0.3s ease;
+    box-shadow: var(--box-shadow);
+}
+
+#reset-button:hover {
+    background-color: #545b62; /* خاکستری تیره‌تر */
+}
+
+
+#result-container h2 {
+    font-size: 1.7em; /* بزرگتر برای عنوان نتیجه */
+    color: var(--success-color);
+    border-bottom: 2px solid var(--success-color);
+    padding-bottom: 0.5em;
+    margin-bottom: 1.2em;
+}
+
+#result-container h3 {
+    color: var(--primary-color);
+    margin-top: 1.8em;
+    margin-bottom: 0.6em;
+    font-size: 1.2em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.3em;
+}
+
+#test-description p, #test-when-to-use p {
+    margin-bottom: 0.5em; /* فاصله کمتر بین پاراگراف‌های توضیحات */
+}
+#test-description, #test-when-to-use {
+    padding-left: 1em; /* کمی تورفتگی برای خوانایی */
+    border-left: 3px solid var(--border-color);
+    background-color: #fdfdfd;
+    padding: 1em;
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+}
+
+
+.code-block-container {
+    position: relative;
+    margin-top: 1em;
+    margin-bottom: 0.5em; /* فاصله کمتر با توضیحات کد */
+    direction: ltr; /* برای نمایش صحیح کد انگلیسی */
+    text-align: left;
+    border-radius: var(--border-radius);
+    overflow: hidden; /* برای اینکه border-radius روی pre هم اعمال شود */
+}
+
+/* استایل برای Prism.js Okaidia theme */
+.code-block-container pre[class*="language-"] {
+    margin: 0;
+    border-radius: var(--border-radius); /* هماهنگی با کانتینر */
+    padding: 1.5em 1em 1em 1em; /* کمی پدینگ بیشتر */
+    font-family: var(--code-font-family);
+    font-size: 0.95em;
+    line-height: 1.5;
+}
+
+.copy-button {
+    position: absolute;
+    top: 10px; 
+    right: 10px; /* در نسخه فارسی بهتر است چپ باشد، اما با LTR بودن بلاک کد، راست مناسب‌تر است */
+    background-color: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 6px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.85em;
+    z-index: 10;
+    transition: background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+.copy-button svg {
+    margin-right: 5px; /* فاصله بین آیکون و متن "کپی" */
+}
+
+.copy-button:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+#r-code-notes {
+    font-size: 0.9em;
+    background-color: #eef1f3; /* پس زمینه روشن‌تر برای توضیحات کد */
+    padding: 1em;
+    border-radius: var(--border-radius);
+    margin-top: 1em; /* فاصله با بلاک کد */
+    border-left: 4px solid var(--primary-color);
+}
+#r-code-notes p {
+    margin: 0.5em 0;
+}
+#r-code-notes p:first-child {
+    margin-top: 0;
+}
+#r-code-notes p:last-child {
+    margin-bottom: 0;
+}
+#r-code-notes code { /* استایل برای کلمات کد داخل توضیحات */
+    background-color: #dbe4ea;
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    font-family: var(--code-font-family);
+    font-size: 0.9em;
+}
+
+
+.hidden {
+    display: none !important;
+}
+
+footer {
+    text-align: center;
+    padding: 2em 1em;
+    background-color: #343a40; /* خاکستری تیره برای فوتر */
+    color: #f8f9fa; /* سفید مایل به خاکستری */
+    font-size: 0.9em;
+    margin-top: auto; /* فوتر را به پایین می‌چسباند اگر محتوا کم باشد */
+}
+
+footer a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+footer a:hover {
+    text-decoration: underline;
+}
+footer .ucla-credit {
+    font-size: 0.9em;
+    margin-top: 0.8em;
+    color: #adb5bd; /* خاکستری روشن‌تر برای متن اعتبار */
+}
+footer .ucla-credit a {
+    color: #8ab4f8; /* یک آبی روشن‌تر و خواناتر در پس‌زمینه تیره */
+}
+footer .heart {
+    color: #e25555; /* قرمز برای قلب */
+    font-size: 1.2em;
+    position: relative;
+    top: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    body {
+        font-size: 15px;
+    }
+    main {
+        width: 95%;
+        margin: 1.5em auto;
+        padding: 1.5em;
+    }
+    header h1 {
+        font-size: 1.7em;
+    }
+    header p {
+        font-size: 0.9em;
+    }
+    #question-text {
+        font-size: 1.3em;
+    }
+    #result-container h2 {
+        font-size: 1.5em;
+    }
+    #options-container button {
+        font-size: 1em;
+        padding: 0.7em 1em;
+    }
+    .copy-button {
+        font-size: 0.8em;
+        padding: 5px 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        font-size: 14px;
+    }
+    main {
+        padding: 1em;
+    }
+    header h1 {
+        font-size: 1.5em;
+    }
+    #question-text {
+        font-size: 1.2em;
+    }
+    #result-container h2 {
+        font-size: 1.3em;
+    }
+     #result-container h3 {
+        font-size: 1.1em;
+    }
+}
