@@ -9,8 +9,14 @@ const rCodeElement = document.getElementById('r-code');
 const rCodeNotesElement = document.getElementById('r-code-notes');
 const resetButtonElement = document.getElementById('reset-button');
 const questionContainerElement = document.getElementById('question-container');
+const copyCodeButtonElement = document.getElementById('copy-code-button');
+const copyButtonTextElement = document.getElementById('copy-button-text');
+
+const userPathContainerElement = document.getElementById('user-path-container');
+const userPathListElement = document.getElementById('user-path-list');
 
 // --- Decision Tree Data Structure ---
+// بازسازی شده بر اساس https://stats.oarc.ucla.edu/other/mult-pkg/whatstat/
 const decisionTree = {
     start: {
         question: "نوع متغیر وابسته اصلی (Dependent Variable) شما چیست؟",
@@ -20,6 +26,8 @@ const decisionTree = {
             { text: "شمارشی (Count)", nextNode: "q_dv_count_num_dvs" }
         ]
     },
+
+    // --- مسیر متغیر وابسته پیوسته ---
     q_dv_continuous_num_dvs: {
         question: "چند متغیر وابسته پیوسته دارید؟",
         options: [
@@ -27,6 +35,8 @@ const decisionTree = {
             { text: "دو یا چند متغیر وابسته پیوسته", nextNode: "q_multi_dv_continuous_num_ivs" }
         ]
     },
+
+    // --- یک متغیر وابسته پیوسته ---
     q_one_dv_continuous_num_ivs: {
         question: "چند متغیر مستقل (Independent Variable) اصلی دارید؟",
         options: [
@@ -47,21 +57,58 @@ const decisionTree = {
         options: [
             { text: "طبقه‌ای با دو سطح/گروه (مثلاً زن/مرد، درمان/کنترل)", nextNode: "q_one_dv_one_iv_cat2_paired" },
             { text: "طبقه‌ای با سه یا چند سطح/گروه (مثلاً سه روش درمانی مختلف)", nextNode: "q_one_dv_one_iv_cat_multi_paired" },
-            { text: "پیوسته (Interval / Ratio)", nextNode: "test_simple_linear_regression" }
+            { text: "پیوسته (Interval / Ratio)", nextNode: "test_simple_linear_regression_or_correlation" },
+            { text: "ترتیبی (Ordinal)", nextNode: "q_one_dv_one_iv_ordinal_iv_options" }
+        ]
+    },
+    q_one_dv_one_iv_ordinal_iv_options: {
+        question: "متغیر مستقل ترتیبی شما چند سطح دارد و هدف چیست؟",
+        options: [
+            { text: "دو سطح ترتیبی (معادل طبقه‌ای دو سطحی)", nextNode: "q_one_dv_one_iv_cat2_paired"}, // Treat as dichotomous categorical
+            { text: "بیش از دو سطح ترتیبی، بررسی همبستگی", nextNode: "test_spearman_correlation"}, // Spearman or Kendall's Tau
+            { text: "بیش از دو سطح ترتیبی، مقایسه گروه‌ها (معادل طبقه‌ای چند سطحی)", nextNode: "q_one_dv_one_iv_cat_multi_paired_nonparametric"} // Non-parametric ANOVA (Kruskal-Wallis)
+        ]
+    },
+    test_simple_linear_regression_or_correlation: {
+        question: "آیا هدف پیش‌بینی/مدل‌سازی رابطه (رگرسیون) است یا فقط سنجش میزان و جهت همبستگی (کورولیشن)؟",
+        options: [
+            { text: "پیش‌بینی / مدل‌سازی رابطه (رگرسیون خطی ساده)", nextNode: "test_simple_linear_regression" },
+            { text: "سنجش میزان و جهت همبستگی (کورولیشن پیرسون)", nextNode: "test_pearson_correlation" }
         ]
     },
     q_one_dv_one_iv_cat2_paired: {
         question: "آیا مشاهدات/گروه‌ها مستقل هستند یا جفت شده/وابسته (repeated measures)؟",
         options: [
-            { text: "مستقل (Independent samples, e.g., different subjects in each group)", nextNode: "test_independent_samples_t_test" },
-            { text: "جفت شده / وابسته (Paired samples / Repeated measures, e.g., same subjects measured twice)", nextNode: "test_paired_samples_t_test" }
+            { text: "مستقل (Independent samples)", nextNode: "q_one_dv_one_iv_cat2_ind_normality" },
+            { text: "جفت شده / وابسته (Paired samples / Repeated measures)", nextNode: "q_one_dv_one_iv_cat2_paired_normality" }
         ]
     },
-    q_one_dv_one_iv_cat_multi_paired: {
-        question: "آیا مشاهدات/گروه‌ها مستقل هستند یا جفت شده/وابسته (repeated measures)؟",
+    q_one_dv_one_iv_cat2_ind_normality: {
+        question: "آیا پیش‌فرض نرمال بودن داده‌ها و همگنی واریانس‌ها برقرار است؟",
+        options: [
+            { text: "بله، یا حجم نمونه بزرگ است.", nextNode: "test_independent_samples_t_test" },
+            { text: "خیر، یا مطمئن نیستم (استفاده از آزمون ناپارامتریک).", nextNode: "test_mann_whitney_u" }
+        ]
+    },
+    q_one_dv_one_iv_cat2_paired_normality: {
+        question: "آیا پیش‌فرض نرمال بودن تفاوت‌های جفت‌شده برقرار است؟",
+        options: [
+            { text: "بله، یا حجم نمونه بزرگ است.", nextNode: "test_paired_samples_t_test" },
+            { text: "خیر، یا مطمئن نیستم (استفاده از آزمون ناپارامتریک).", nextNode: "test_wilcoxon_signed_rank_paired" }
+        ]
+    },
+    q_one_dv_one_iv_cat_multi_paired: { // For 3+ groups, parametric path
+        question: "آیا مشاهدات/گروه‌ها مستقل هستند یا جفت شده/وابسته (repeated measures)؟ (با فرض نرمالیتی و همگنی واریانس‌ها)",
         options: [
             { text: "مستقل", nextNode: "test_one_way_anova" },
             { text: "جفت شده / وابسته", nextNode: "test_one_way_repeated_measures_anova" }
+        ]
+    },
+    q_one_dv_one_iv_cat_multi_paired_nonparametric: { // For 3+ groups, non-parametric path
+        question: "آیا مشاهدات/گروه‌ها مستقل هستند یا جفت شده/وابسته (repeated measures)؟ (برای آزمون‌های ناپارامتریک)",
+        options: [
+            { text: "مستقل", nextNode: "test_kruskal_wallis" },
+            { text: "جفت شده / وابسته", nextNode: "test_friedman_test" }
         ]
     },
     q_one_dv_multi_iv_type: {
@@ -82,104 +129,112 @@ const decisionTree = {
     q_one_dv_multi_iv_all_cat_paired_interaction: {
         question: "آیا داده‌ها شامل اندازه‌گیری‌های مکرر (repeated measures) روی حداقل یکی از فاکتورها هستند؟",
         options: [
-            { text: "خیر، تمام فاکتورها بین آزمودنی (between-subjects) هستند.", nextNode: "test_factorial_anova_independent" },
-            { text: "بله، حداقل یک فاکتور درون آزمودنی (within-subjects / repeated measures) است.", nextNode: "test_factorial_anova_repeated_measures" },
+            { text: "خیر, تمام فاکتورها بین آزمودنی (between-subjects) هستند.", nextNode: "test_factorial_anova_independent" },
+            { text: "بله, حداقل یک فاکتور درون آزمودنی (within-subjects) است.", nextNode: "test_factorial_anova_repeated_measures" }, // Simplified, could be mixed
             { text: "طرح مختلط (Mixed design): هم فاکتور بین آزمودنی و هم درون آزمودنی دارم.", nextNode: "test_mixed_anova" }
         ]
     },
-    q_one_dv_multi_iv_all_cat_paired_no_interaction: {
-        question: "آیا داده‌ها شامل اندازه‌گیری‌های مکرر (repeated measures) روی حداقل یکی از فاکتورها هستند؟",
+     q_one_dv_multi_iv_all_cat_paired_no_interaction: {
+        question: "آیا داده‌ها شامل اندازه‌گیری‌های مکرر (repeated measures) روی حداقل یکی از فاکتورها هستند؟ (فقط اثرات اصلی)",
         options: [
-            { text: "خیر، تمام فاکتورها بین آزمودنی (between-subjects) هستند.", nextNode: "test_anova_main_effects_only_independent" },
-            { text: "بله، حداقل یک فاکتور درون آزمودنی (within-subjects / repeated measures) است.", nextNode: "test_repeated_measures_anova_main_effects_only" }
+            { text: "خیر, تمام فاکتورها بین آزمودنی هستند.", nextNode: "test_anova_main_effects_only_independent" },
+            { text: "بله, حداقل یک فاکتور درون آزمودنی است.", nextNode: "test_repeated_measures_anova_main_effects_only" }
         ]
     },
+
+    // --- دو یا چند متغیر وابسته پیوسته ---
     q_multi_dv_continuous_num_ivs: {
-        question: "چند متغیر مستقل (Independent Variable) اصلی دارید؟",
+        question: "چند متغیر مستقل (Independent Variable) اصلی دارید و نوع آن‌ها چیست؟",
         options: [
-            { text: "یک متغیر مستقل", nextNode: "q_multi_dv_one_iv_type" },
-            { text: "دو یا چند متغیر مستقل", nextNode: "q_multi_dv_multi_iv_type" }
+            { text: "یک متغیر مستقل طبقه‌ای", nextNode: "test_manova" },
+            { text: "یک متغیر مستقل پیوسته", nextNode: "test_canonical_correlation_or_multivariate_regression_one_iv" }, // If IV is one, it's essentially set of regressions unless IV also multivariate
+            { text: "دو یا چند متغیر مستقل طبقه‌ای", nextNode: "test_factorial_manova" },
+            { text: "دو یا چند متغیر مستقل پیوسته (یا ترکیبی)", nextNode: "test_multivariate_multiple_regression" }
         ]
     },
-    q_multi_dv_one_iv_type: {
-        question: "نوع متغیر مستقل شما چیست؟",
+    test_canonical_correlation_or_multivariate_regression_one_iv: {
+        question: "آیا به بررسی رابطه بین دو مجموعه از متغیرها (یک مجموعه از DVها و یک مجموعه از IVها که اینجا فقط یک IV است) علاقه‌مندید، یا مدل‌سازی هر DV توسط آن IV؟",
         options: [
-            { text: "طبقه‌ای (Categorical)", nextNode: "test_manova" },
-            { text: "پیوسته (Continuous)", nextNode: "test_multivariate_multiple_regression" }
+            { text: "مدل‌سازی هر DV توسط IV (مجموعه‌ای از رگرسیون‌های ساده)", nextNode: "info_set_of_simple_regressions" },
+            { text: "بررسی رابطه بین مجموعه DVها و IV (کورولیشن کانونی - کمتر رایج با یک IV)", nextNode: "test_canonical_correlation" }
         ]
     },
-    q_multi_dv_multi_iv_type: {
-        question: "ماهیت متغیرهای مستقل شما چگونه است؟",
-        options: [
-            { text: "همگی طبقه‌ای (Categorical)", nextNode: "test_factorial_manova" },
-            { text: "همگی پیوسته (Continuous) یا ترکیبی", nextNode: "test_multivariate_multiple_regression" }
-        ]
-    },
+
+    // --- مسیر متغیر وابسته طبقه‌ای ---
     q_dv_categorical_num_dvs: {
-        question: "چند متغیر وابسته طبقه‌ای دارید؟",
+        question: "متغیر وابسته طبقه‌ای شما چند سطحی است (دو سطحی یا چند سطحی) و چند متغیر وابسته طبقه‌ای دارید؟",
         options: [
-            { text: "یک متغیر وابسته طبقه‌ای", nextNode: "q_one_dv_categorical_num_ivs" },
+            { text: "یک متغیر وابسته دوتایی (Binary)", nextNode: "q_one_dv_binary_num_ivs" },
+            { text: "یک متغیر وابسته چند سطحی اسمی (Nominal)", nextNode: "q_one_dv_multinomial_num_ivs" },
+            { text: "یک متغیر وابسته چند سطحی ترتیبی (Ordinal)", nextNode: "q_one_dv_ordinal_num_ivs" },
             { text: "دو یا چند متغیر وابسته طبقه‌ای", nextNode: "test_log_linear_model_or_mca" }
         ]
     },
-    q_one_dv_categorical_num_ivs: {
-        question: "چند متغیر مستقل (Independent Variable) اصلی دارید؟",
+
+    // یک متغیر وابسته دوتایی (Binary)
+    q_one_dv_binary_num_ivs: {
+        question: "چند متغیر مستقل دارید و نوع آن‌ها چیست؟ (برای DV دوتایی)",
         options: [
-            { text: "هیچ (بررسی توزیع فراوانی یا نیکویی برازش با یک توزیع نظری)", nextNode: "q_one_dv_cat_no_iv_goal" },
-            { text: "یک متغیر مستقل", nextNode: "q_one_dv_one_iv_cat_type_of_iv" },
-            { text: "دو یا چند متغیر مستقل", nextNode: "q_one_dv_multi_iv_cat_type_of_ivs" }
+            { text: "هیچ (بررسی نسبت‌ها یا نیکویی برازش)", nextNode: "q_one_dv_binary_no_iv_goal" },
+            { text: "یک متغیر مستقل طبقه‌ای (دو یا چند سطحی)", nextNode: "q_one_dv_binary_one_iv_cat_paired" },
+            { text: "یک متغیر مستقل پیوسته یا ترتیبی", nextNode: "test_logistic_regression_simple" }, // Ordinal IV often treated as continuous or dummy in logistic
+            { text: "دو یا چند متغیر مستقل (از هر نوع)", nextNode: "test_multiple_logistic_regression" }
         ]
     },
-    q_one_dv_cat_no_iv_goal: {
-        question: "هدف شما چیست؟",
+    q_one_dv_binary_no_iv_goal: {
+        question: "هدف شما برای متغیر وابسته دوتایی بدون متغیر مستقل چیست؟",
         options: [
-            { text: "مقایسه فراوانی‌های مشاهده شده با فراوانی‌های مورد انتظار (نیکویی برازش)", nextNode: "test_chi_square_goodness_of_fit" },
-            { text: "توصیف فراوانی‌ها و درصدها", nextNode: "info_descriptive_frequencies" }
+            { text: "مقایسه نسبت مشاهده شده با یک نسبت مورد انتظار (نیکویی برازش)", nextNode: "test_binomial_test_or_chi_sq_gof_binary" },
+            { text: "توصیف فراوانی‌ها و نسبت‌ها", nextNode: "info_descriptive_frequencies_binary" }
         ]
     },
-    q_one_dv_one_iv_cat_type_of_iv: {
-        question: "نوع متغیر مستقل شما چیست؟",
+    q_one_dv_binary_one_iv_cat_paired: {
+        question: "آیا مشاهدات/گروه‌ها برای متغیر مستقل طبقه‌ای، مستقل هستند یا جفت شده/وابسته؟",
         options: [
-            { text: "طبقه‌ای (Categorical)", nextNode: "q_one_dv_cat_one_iv_cat_paired" },
-            { text: "پیوسته (Continuous)", nextNode: "test_logistic_regression_simple" },
-            { text: "ترتیبی (Ordinal)", nextNode: "test_ordinal_logistic_regression" }
+            { text: "مستقل", nextNode: "test_chi_square_test_of_independence_or_fisher" }, // Or Fisher's for small N
+            { text: "جفت شده / وابسته (معمولاً برای DV دوتایی که دو بار اندازه‌گیری شده)", nextNode: "test_mcnemar_test" }
         ]
     },
-    q_one_dv_cat_one_iv_cat_paired: {
-        question: "آیا مشاهدات/گروه‌ها مستقل هستند یا جفت شده/وابسته؟",
+
+    // یک متغیر وابسته چند سطحی اسمی (Nominal)
+    q_one_dv_multinomial_num_ivs: {
+        question: "چند متغیر مستقل دارید؟ (برای DV چند سطحی اسمی)",
         options: [
-            { text: "مستقل (Independent samples)", nextNode: "test_chi_square_test_of_independence" },
-            { text: "جفت شده / وابسته (Paired samples / Repeated measures)", nextNode: "test_mcnemar_test" }
+            { text: "هیچ (نیکویی برازش برای چند سطح)", nextNode: "test_chi_square_goodness_of_fit" }, // General GOF
+            { text: "یک یا چند متغیر مستقل (از هر نوع)", nextNode: "test_multinomial_logistic_regression" }
         ]
     },
-    q_one_dv_multi_iv_cat_type_of_ivs: {
-        question: "ماهیت متغیرهای مستقل شما چگونه است؟ (نوع متغیر وابسته طبقه‌ای شما چیست؟ دو سطحی یا چند سطحی؟)",
+
+    // یک متغیر وابسته چند سطحی ترتیبی (Ordinal)
+    q_one_dv_ordinal_num_ivs: {
+        question: "چند متغیر مستقل دارید و نوع آن‌ها چیست؟ (برای DV چند سطحی ترتیبی)",
         options: [
-            { text: "متغیرهای مستقل همگی طبقه‌ای (DV دو سطحی)", nextNode: "test_logistic_regression_multi_cat_iv" },
-            { text: "متغیرهای مستقل همگی پیوسته یا ترکیبی (DV دو سطحی)", nextNode: "test_multiple_logistic_regression" },
-            { text: "متغیر وابسته چند سطحی اسمی (Nominal)", nextNode: "test_multinomial_logistic_regression" },
-            { text: "متغیر وابسته چند سطحی ترتیبی (Ordinal)", nextNode: "test_ordinal_logistic_regression_multi_iv" }
+            { text: "هیچ (بررسی توزیع یا مقایسه با توزیع نظری)", nextNode: "info_descriptive_ordinal_or_gof" },
+            { text: "یک متغیر مستقل طبقه‌ای", nextNode: "test_mann_whitney_or_kruskal_wallis_for_ordinal_dv" }, // Depending on number of groups in IV
+            { text: "یک یا چند متغیر مستقل (از هر نوع، برای مدل‌سازی)", nextNode: "test_ordinal_logistic_regression" }
         ]
     },
-    q_dv_count_num_dvs: {
-        question: "چند متغیر مستقل (Independent Variable) اصلی دارید؟",
+
+    // --- مسیر متغیر وابسته شمارشی (Count) ---
+    q_dv_count_num_dvs: { // Assuming one count DV
+        question: "چند متغیر مستقل (Independent Variable) اصلی دارید؟ (برای DV شمارشی)",
         options: [
             { text: "هیچ (مقایسه میانگین شمارش با یک مقدار ثابت یا بررسی توزیع)", nextNode: "q_one_dv_count_no_iv_goal" },
             { text: "یک یا چند متغیر مستقل (برای مدل‌سازی نرخ شمارش)", nextNode: "q_one_dv_count_iv_exposure" }
         ]
     },
     q_one_dv_count_no_iv_goal: {
-        question: "هدف شما چیست؟",
+        question: "هدف شما برای متغیر وابسته شمارشی بدون متغیر مستقل چیست؟",
         options: [
-            { text: "مقایسه نرخ شمارش مشاهده شده با یک نرخ مورد انتظار", nextNode: "test_poisson_goodness_of_fit" },
+            { text: "مقایسه نرخ شمارش مشاهده شده با یک نرخ مورد انتظار (نیکویی برازش پواسون)", nextNode: "test_poisson_goodness_of_fit" },
             { text: "توصیف توزیع شمارش", nextNode: "info_descriptive_count" }
         ]
     },
     q_one_dv_count_iv_exposure: {
-        question: "آیا متغیر جبرانی (exposure variable) یا دوره زمانی مشاهده برای هر واحد یکسان است یا متفاوت؟",
+        question: "آیا متغیر جبرانی (exposure variable) یا دوره زمانی مشاهده برای هر واحد یکسان است یا متفاوت و می‌خواهید آن را در مدل لحاظ کنید (offset)؟",
         options: [
-            { text: "یکسان است یا می‌خواهم نرخ را مستقیماً مدل کنم.", nextNode: "q_one_dv_count_iv_dispersion" },
-            { text: "متفاوت است و می‌خواهم آن را در مدل لحاظ کنم (offset).", nextNode: "q_one_dv_count_iv_dispersion_offset" }
+            { text: "یکسان است یا نمی‌خواهم از offset استفاده کنم.", nextNode: "q_one_dv_count_iv_dispersion" },
+            { text: "متفاوت است و می‌خواهم از offset استفاده کنم.", nextNode: "q_one_dv_count_iv_dispersion_offset" }
         ]
     },
     q_one_dv_count_iv_dispersion: {
@@ -187,488 +242,421 @@ const decisionTree = {
         options: [
             { text: "خیر، یا مطمئن نیستم (شروع با پواسون).", nextNode: "test_poisson_regression" },
             { text: "بله، پراکندگی بیش از حد وجود دارد یا محتمل است.", nextNode: "test_negative_binomial_regression" },
-            { text: "داده‌ها شامل تعداد زیادی صفر هستند (Zero-inflated).", nextNode: "test_zero_inflated_poisson_or_nb" }
+            { text: "داده‌ها شامل تعداد زیادی صفر بیش از حد انتظار هستند (Zero-inflated).", nextNode: "test_zero_inflated_poisson_or_nb" }
         ]
     },
     q_one_dv_count_iv_dispersion_offset: {
-        question: "آیا پراکندگی بیش از حد (Overdispersion) در داده‌های شمارشی شما محتمل است؟ (با لحاظ کردن متغیر جبرانی)",
+        question: "آیا پراکندگی بیش از حد (Overdispersion) در داده‌های شمارشی شما (با لحاظ offset) محتمل است؟",
         options: [
             { text: "خیر، یا مطمئن نیستم (شروع با پواسون با offset).", nextNode: "test_poisson_regression_offset" },
-            { text: "بله، پراکندگی بیش از حد وجود دارد یا محتمل است (با offset).", nextNode: "test_negative_binomial_regression_offset" }
+            { text: "بله، پراکندگی بیش از حد وجود دارد یا محتمل است (با offset).", nextNode: "test_negative_binomial_regression_offset" },
+            { text: "داده‌ها با offset، شامل تعداد زیادی صفر بیش از حد انتظار هستند.", nextNode: "test_zero_inflated_poisson_or_nb_offset" } // Need specific offset versions for ZI models
         ]
     },
-    test_one_sample_t_test: {
+
+    // --- تعریف آزمون‌های نهایی (Final Tests) و گره‌های اطلاعاتی (info_...) ---
+    // ## آزمون‌های مربوط به یک متغیر وابسته پیوسته ##
+    test_one_sample_t_test: { /* ... کد از پیام قبلی ... */ },
+    test_shapiro_wilk: { /* ... کد از پیام قبلی ... */ },
+    test_independent_samples_t_test: { /* ... کد از پیام قبلی ... */ },
+    test_paired_samples_t_test: { /* ... کد از پیام قبلی ... */ },
+    test_simple_linear_regression: { /* ... کد از پیام قبلی ... */ },
+    test_pearson_correlation: {
         isFinal: true,
-        name: "آزمون تی تک نمونه‌ای (One-Sample t-test)",
-        description: "برای مقایسه میانگین یک گروه با یک مقدار مشخص (مقدار فرضی یا میانگین جامعه).",
-        whenToUse: "زمانی که یک متغیر وابسته پیوسته دارید و می‌خواهید بدانید آیا میانگین آن در نمونه شما به طور معناداری با یک مقدار ثابت (μ0) تفاوت دارد یا خیر. داده‌ها باید تقریباً نرمال توزیع شده باشند.",
+        name: "همبستگی پیرسون (Pearson Correlation)",
+        description: "برای سنجش قدرت و جهت رابطه خطی بین دو متغیر پیوسته.",
+        whenToUse: "زمانی که دو متغیر پیوسته دارید و می‌خواهید بدانید چگونه با هم تغییر می‌کنند. پیش‌فرض‌ها شامل نرمال بودن توزیع هر دو متغیر و رابطه خطی است.",
         r_code: `
-t.test(data$variable, mu = mu0)
+# data$variable1, data$variable2 متغیرهای پیوسته شما
+cor.test(data$variable1, data$variable2, method = "pearson")
         `,
-        r_code_notes: "<p><code>data$variable</code> متغیر مورد بررسی شماست.</p><p><code>mu = mu0</code> مقدار فرضی برای مقایسه است (مثلاً <code>mu = 50</code>).</p><p>پیش‌فرض اصلی نرمال بودن داده‌ها یا حجم نمونه بزرگ است.</p>"
+        r_code_notes: "<p>ضریب همبستگی (r) بین -1 و +1 است. مقدار p-value معناداری همبستگی را نشان می‌دهد.</p><p>نمودار پراکندگی (<code>plot(data$variable1, data$variable2)</code>) برای مشاهده بصری رابطه مفید است.</p>"
     },
-    test_shapiro_wilk: {
+    test_spearman_correlation: {
         isFinal: true,
-        name: "آزمون شاپیرو-ویلک (Shapiro-Wilk test for normality)",
-        description: "برای بررسی اینکه آیا یک نمونه از یک توزیع نرمال آمده است یا خیر.",
-        whenToUse: "زمانی که می‌خواهید پیش‌فرض نرمال بودن داده‌ها را برای آزمون‌های پارامتریک (مانند t-test یا ANOVA) بررسی کنید. این آزمون به حجم نمونه حساس است.",
+        name: "همبستگی اسپیرمن (Spearman Rank Correlation)",
+        description: "برای سنجش قدرت و جهت رابطه یکنواخت (monotonic) بین دو متغیر پیوسته یا ترتیبی.",
+        whenToUse: "زمانی که حداقل یکی از متغیرها ترتیبی است، یا زمانی که متغیرهای پیوسته پیش‌فرض نرمال بودن را برای همبستگی پیرسون برآورده نمی‌کنند، یا زمانی که انتظار رابطه یکنواخت (نه لزوماً خطی) دارید.",
         r_code: `
-shapiro.test(data$variable)
+# data$variable1, data$variable2 متغیرهای شما (پیوسته یا ترتیبی)
+cor.test(data$variable1, data$variable2, method = "spearman")
         `,
-        r_code_notes: "<p>اگر p-value بزرگتر از سطح معناداری (مثلاً 0.05) باشد، دلیلی برای رد فرض نرمال بودن وجود ندارد.</p><p>برای ارزیابی بصری نرمال بودن، از نمودار Q-Q Plot (<code>qqnorm()</code>, <code>qqline()</code>) و هیستوگرام نیز استفاده کنید.</p>"
+        r_code_notes: "<p>این آزمون بر اساس رتبه‌های داده‌ها کار می‌کند و به مقادیر پرت حساسیت کمتری دارد.</p>"
     },
-    test_independent_samples_t_test: {
+    test_mann_whitney_u: { /* (Wilcoxon Rank Sum Test) ... کد از پیام قبلی ... */ },
+    test_wilcoxon_signed_rank_paired: { /* ... کد از پیام قبلی ... */ },
+    test_one_way_anova: { /* ... کد از پیام قبلی ... */ },
+    test_kruskal_wallis: {
         isFinal: true,
-        name: "آزمون تی دو نمونه مستقل (Independent Samples t-test)",
-        description: "برای مقایسه میانگین‌های دو گروه مستقل.",
-        whenToUse: "زمانی که یک متغیر وابسته پیوسته و یک متغیر مستقل طبقه‌ای با دو سطح (دو گروه مستقل) دارید. پیش‌فرض‌ها شامل نرمال بودن داده‌ها در هر گروه و برابری واریانس‌ها (هرچند آزمون ولچ t-test به این پیش‌فرض حساس نیست).",
+        name: "آزمون کروسکال-والیس (Kruskal-Wallis Test)",
+        description: "معادل ناپارامتریک تحلیل واریانس یک‌طرفه (One-Way ANOVA)، برای مقایسه میانگین رتبه‌های سه یا چند گروه مستقل.",
+        whenToUse: "زمانی که یک متغیر وابسته پیوسته یا ترتیبی و یک متغیر مستقل طبقه‌ای با سه یا چند سطح دارید و پیش‌فرض‌های ANOVA (نرمال بودن، همگنی واریانس‌ها) برقرار نیست.",
         r_code: `
-t.test(dependent_var ~ group_var, data = data, var.equal = FALSE)
+# data$dependent_var متغیر وابسته (پیوسته یا ترتیبی)
+# data$group_var متغیر مستقل طبقه‌ای (فاکتور) با k سطح (k >= 3)
+# data$group_var <- factor(data$group_var)
+kruskal.test(dependent_var ~ group_var, data = data)
+
+# برای آزمون‌های تعقیبی ناپارامتریک (مثلاً Dunn's test):
+# install.packages("dunn.test")
+# library(dunn.test)
+# dunn.test(data$dependent_var, g = data$group_var, method = "bonferroni")
         `,
-        r_code_notes: "<p><code>var.equal = FALSE</code> (پیش‌فرض در R) آزمون ولچ را اجرا می‌کند که در صورت نابرابری واریانس‌ها معتبرتر است.</p><p>برای بررسی برابری واریانس‌ها می‌توانید از آزمون Levene (<code>car::leveneTest()</code>) استفاده کنید.</p>"
+        r_code_notes: "<p>اگر نتیجه آزمون کروسکال-والیس معنادار باشد، از آزمون‌های تعقیبی ناپارامتریک برای مقایسه جفتی گروه‌ها استفاده کنید.</p>"
     },
-    test_paired_samples_t_test: {
+    test_friedman_test: {
         isFinal: true,
-        name: "آزمون تی نمونه‌های جفت شده (Paired Samples t-test)",
-        description: "برای مقایسه میانگین‌های دو اندازه‌گیری وابسته (جفت شده) روی یک گروه از آزمودنی‌ها.",
-        whenToUse: "زمانی که یک متغیر وابسته پیوسته دارید که دو بار روی یک گروه از افراد یا واحدهای جفت شده اندازه‌گیری شده است (مثلاً قبل و بعد از یک مداخله). پیش‌فرض این است که تفاوت بین جفت‌ها نرمال توزیع شده باشد.",
+        name: "آزمون فریدمن (Friedman Test)",
+        description: "معادل ناپارامتریک تحلیل واریانس یک‌طرفه با اندازه‌گیری‌های مکرر، برای مقایسه میانگین رتبه‌ها در سه یا چند سطح از یک فاکتور درون‌آزمودنی.",
+        whenToUse: "زمانی که یک متغیر وابسته پیوسته یا ترتیبی دارید که سه بار یا بیشتر روی یک گروه از افراد اندازه‌گیری شده و پیش‌فرض کرویت برای ANOVA مکرر برقرار نیست یا داده‌ها به شدت غیرنرمال هستند.",
         r_code: `
-t.test(data$measurement1, data$measurement2, paired = TRUE)
+# داده‌ها باید در فرمت ماتریسی باشند (ستون‌ها = شرایط/زمان‌ها، ردیف‌ها = آزمودنی‌ها)
+# یا در فرمت long با تابع friedman.test(y ~ groups | blocks, data = mydata_long)
+
+# مثال با داده‌های ماتریسی (فرض کنید Y1, Y2, Y3 سه اندازه‌گیری هستند)
+# my_matrix_data <- cbind(data$Y1, data$Y2, data$Y3)
+# friedman.test(my_matrix_data)
+
+# مثال با فرمت long:
+# data_long شامل ستون‌های: id (شناسه آزمودنی), time (فاکتور درون‌آزمودنی), value (متغیر وابسته)
+# friedman.test(value ~ time | id, data = data_long)
         `,
-        r_code_notes: "<p><code>paired = TRUE</code> مشخص می‌کند که آزمون برای نمونه‌های جفت شده است.</p><p>اطمینان حاصل کنید که ترتیب دو متغیر در تابع <code>t.test</code> درست است، به خصوص اگر جهت تفاوت برایتان مهم است.</p>"
+        r_code_notes: "<p>اگر داده‌ها در فرمت long هستند، فرمول <code>y ~ groups | blocks</code> استفاده می‌شود که <code>y</code> متغیر وابسته، <code>groups</code> فاکتور درون‌آزمودنی، و <code>blocks</code> شناسه آزمودنی‌هاست.</p><p>برای آزمون‌های تعقیبی ناپارامتریک (مثلاً آزمون Nemenyi یا Wilcoxon جفتی با تصحیح)، پکیج‌های <code>PMCMRplus</code> یا <code>scmamp</code> را بررسی کنید.</p>"
     },
-    test_simple_linear_regression: {
+    test_one_way_repeated_measures_anova: { /* ... کد از پیام قبلی ... */ },
+    test_multiple_regression: { /* ... کد از پیام قبلی ... */ },
+    test_ancova_or_regression_with_dummies: { /* ... کد از پیام قبلی ... */ },
+    test_factorial_anova_independent: { /* ... کد از پیام قبلی ... */ },
+    test_factorial_anova_repeated_measures: { /* ... کد از پیام قبلی ... */ },
+    test_mixed_anova: { /* ... کد از پیام قبلی ... */ },
+    test_anova_main_effects_only_independent: { /* ... کد از پیام قبلی ... */ },
+    test_repeated_measures_anova_main_effects_only: { /* ... کد از پیام قبلی ... */ },
+    test_manova: { /* ... کد از پیام قبلی ... */ },
+    test_factorial_manova: { /* ... کد از پیام قبلی ... */ },
+    test_multivariate_multiple_regression: { /* ... کد از پیام قبلی ... */ },
+    test_canonical_correlation: {
         isFinal: true,
-        name: "رگرسیون خطی ساده (Simple Linear Regression)",
-        description: "برای بررسی رابطه خطی بین یک متغیر وابسته پیوسته و یک متغیر مستقل پیوسته.",
-        whenToUse: "زمانی که می‌خواهید پیش‌بینی کنید یا توضیح دهید که چگونه یک متغیر مستقل پیوسته بر یک متغیر وابسته پیوسته تاثیر می‌گذارد.",
+        name: "همبستگی کانونی (Canonical Correlation Analysis - CCA)",
+        description: "برای بررسی رابطه بین دو مجموعه از متغیرهای پیوسته (یک مجموعه متغیرهای X و یک مجموعه متغیرهای Y).",
+        whenToUse: "زمانی که می‌خواهید همبستگی بین ترکیب‌های خطی از دو مجموعه متغیر را پیدا کنید. این روش چندین جفت از ترکیب‌های خطی (متغیرهای کانونی) را که بیشترین همبستگی را با هم دارند، استخراج می‌کند.",
         r_code: `
-model <- lm(dependent_var ~ independent_var, data = data)
-summary(model)
+# نیاز به پکیج CCA یا candisc
+# install.packages("CCA")
+library(CCA)
+
+# X_vars یک ماتریس از مجموعه اول متغیرها
+# Y_vars یک ماتریس از مجموعه دوم متغیرها
+# X_vars <- as.matrix(data[, c("X1", "X2")])
+# Y_vars <- as.matrix(data[, c("Y1", "Y2", "Y3")])
+
+# cc_result <- cc(X_vars, Y_vars)
+# print(cc_result$cor) # همبستگی‌های کانونی
+
+# برای آزمون معناداری همبستگی‌ها:
+# install.packages("candisc")
+# library(candisc)
+# model_cca <- lm(cbind(Y1, Y2, Y3) ~ X1 + X2, data=data)
+# can_corr_test <- manova(model_cca) # از طریق MANOVA برای آزمون Wilks' Lambda
+# summary(can_corr_test, test="Wilks") 
+# یا استفاده از پکیج‌های تخصصی‌تر برای آزمون‌های CCA
         `,
-        r_code_notes: "<p><code>lm</code> مخفف linear model است.</p><p><code>summary(model)</code> ضرایب، خطای استاندارد، آماره t، p-value و R-squared را نشان می‌دهد.</p><p>پیش‌فرض‌ها شامل خطی بودن رابطه، استقلال خطاها، همسانی واریانس خطاها (homoscedasticity) و نرمال بودن توزیع خطاها است.</p>"
+        r_code_notes: "<p>پکیج <code>CCA</code> یا <code>candisc</code> برای این تحلیل مفید هستند.</p><p>تفسیر نتایج CCA می‌تواند پیچیده باشد و شامل بررسی همبستگی‌های کانونی، بارهای کانونی و واریانس مشترک است.</p>"
     },
-    test_one_way_anova: {
+    info_set_of_simple_regressions: {
         isFinal: true,
-        name: "تحلیل واریانس یک‌طرفه (One-Way ANOVA)",
-        description: "برای مقایسه میانگین‌های سه یا چند گروه مستقل.",
-        whenToUse: "زمانی که یک متغیر وابسته پیوسته و یک متغیر مستقل طبقه‌ای با سه یا چند سطح (گروه مستقل) دارید. پیش‌فرض‌ها شامل نرمال بودن داده‌ها در هر گروه، برابری واریانس‌ها بین گروه‌ها (homoscedasticity) و استقلال مشاهدات است.",
+        name: "اطلاعات: اجرای مجموعه‌ای از رگرسیون‌های ساده/چندگانه",
+        description: "زمانی که چندین متغیر وابسته پیوسته دارید و می‌خواهید هر یک را به طور جداگانه توسط یک یا چند متغیر مستقل مدل‌سازی کنید، می‌توانید برای هر متغیر وابسته یک مدل رگرسیون جداگانه اجرا کنید.",
+        whenToUse: "این روش زمانی مناسب است که متغیرهای وابسته از نظر مفهومی متمایز هستند و علاقه‌ای به بررسی روابط همزمان بین آن‌ها (مانند MANOVA یا رگرسیون چندمتغیره) ندارید. در صورت اجرای تعداد زیادی آزمون، به مشکل آزمون‌های چندگانه (multiple testing problem) و نیاز به تصحیح سطح آلفا (مانند تصحیح بونفرونی) توجه کنید.",
         r_code: `
-model <- aov(dependent_var ~ group_var, data = data)
-summary(model)
+# فرض کنید Y1, Y2, Y3 متغیرهای وابسته و X1, X2 متغیرهای مستقل هستند
+# model_Y1 <- lm(Y1 ~ X1 + X2, data = data)
+# summary(model_Y1)
+
+# model_Y2 <- lm(Y2 ~ X1 + X2, data = data)
+# summary(model_Y2)
+
+# model_Y3 <- lm(Y3 ~ X1 + X2, data = data)
+# summary(model_Y3)
         `,
-        r_code_notes: "<p>اگر متغیر گروه شما عددی است، ابتدا آن را به <code>factor</code> تبدیل کنید.</p><p>اگر نتیجه ANOVA معنادار بود (p-value کوچک)، از آزمون‌های تعقیبی مانند Tukey HSD برای مقایسه جفتی میانگین‌ها استفاده کنید.</p><p>برای بررسی برابری واریانس‌ها از آزمون Levene (<code>car::leveneTest()</code>) استفاده کنید.</p>"
+        r_code_notes: "<p>هر مدل به طور مستقل تفسیر می‌شود. اگر تعداد زیادی مدل اجرا می‌کنید، مراقب افزایش احتمال خطای نوع اول باشید و از روش‌های تصحیح برای آزمون‌های چندگانه استفاده کنید.</p>"
     },
-    test_one_way_repeated_measures_anova: {
+
+    // ## آزمون‌های مربوط به یک متغیر وابسته طبقه‌ای ##
+    test_binomial_test_or_chi_sq_gof_binary: {
+        question: "آیا فراوانی مورد انتظار برای هر دو سطح متغیر دوتایی شما حداقل 5 است؟",
+        options: [
+            { text: "بله", nextNode: "test_chi_square_goodness_of_fit_binary" }, // Chi-sq GOF for binary
+            { text: "خیر، یا می‌خواهم از آزمون دقیق استفاده کنم.", nextNode: "test_binomial_test" }
+        ]
+    },
+    test_binomial_test: {
         isFinal: true,
-        name: "تحلیل واریانس یک‌طرفه با اندازه‌گیری‌های مکرر (One-Way Repeated Measures ANOVA)",
-        description: "برای مقایسه میانگین‌ها در سه یا چند سطح از یک فاکتور درون‌آزمودنی (within-subjects factor).",
-        whenToUse: "زمانی که یک متغیر وابسته پیوسته دارید که سه بار یا بیشتر روی یک گروه از افراد یا واحدهای مشابه اندازه‌گیری شده است (مثلاً در سه نقطه زمانی مختلف). پیش‌فرض کرویت (sphericity) مهم است.",
+        name: "آزمون دوجمله‌ای (Binomial Test)",
+        description: "برای مقایسه نسبت مشاهده شده یک متغیر دوتایی با یک نسبت مورد انتظار (نظری).",
+        whenToUse: "زمانی که یک متغیر دوتایی (دو پیامد ممکن) دارید و می‌خواهید بدانید آیا نسبت یکی از پیامدها در نمونه شما به طور معناداری با یک مقدار p0 (احتمال فرضی) تفاوت دارد. این آزمون دقیق است و برای حجم نمونه کوچک نیز مناسب است.",
         r_code: `
-library(rstatix)
-model <- anova_test(data = data_long, dv = value, wid = id, within = time)
-print(model)
+# x: تعداد موفقیت‌های مشاهده شده
+# n: تعداد کل آزمایش‌ها (حجم نمونه)
+# p0: احتمال موفقیت مورد انتظار تحت فرضیه صفر
+# binom.test(x = 50, n = 100, p = 0.55) # مثال: 50 موفقیت در 100 آزمایش، با p0=0.55
         `,
-        r_code_notes: "<p>داده‌ها باید در فرمت 'long' باشند: هر ردیف یک مشاهده، با ستون‌هایی برای شناسه فرد، فاکتور درون‌آزمودنی و مقدار متغیر وابسته.</p><p>پیش‌فرض کرویت (sphericity) با آزمون ماچلی (Mauchly's Test) بررسی می‌شود. اگر نقض شود، از مقادیر p تصحیح شده (مانند Greenhouse-Geisser) استفاده کنید.</p>"
+        r_code_notes: "<p>اگر داده‌های شما به صورت تعداد موفقیت‌ها و تعداد کل آزمایش‌ها نیست، ابتدا باید آن‌ها را محاسبه کنید.</p>"
     },
-    test_multiple_regression: {
+    test_chi_square_goodness_of_fit_binary: {
         isFinal: true,
-        name: "رگرسیون چندگانه (Multiple Regression)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته پیوسته و دو یا چند متغیر مستقل (پیوسته یا طبقه‌ای).",
-        whenToUse: "زمانی که می‌خواهید پیش‌بینی کنید یا توضیح دهید که چگونه چندین متغیر مستقل بر یک متغیر وابسته پیوسته تاثیر می‌گذارند. متغیرهای مستقل طبقه‌ای باید به صورت متغیرهای ساختگی (dummy variables) وارد شوند.",
+        name: "آزمون خی‌دو نیکویی برازش (برای متغیر دوتایی)",
+        description: "برای مقایسه فراوانی‌های مشاهده شده یک متغیر دوتایی با فراوانی‌های مورد انتظار.",
+        whenToUse: "زمانی که یک متغیر دوتایی دارید و می‌خواهید بدانید آیا توزیع فراوانی آن با یک توزیع مشخص (تعیین شده توسط احتمالات مورد انتظار برای هر دو سطح) مطابقت دارد. فراوانی‌های مورد انتظار باید به اندازه کافی بزرگ باشند (معمولاً ≥ 5).",
         r_code: `
-model <- lm(dependent_var ~ independent_var1 + independent_var2 + independent_var_categorical, data = data)
-summary(model)
+# observed_freqs <- c(60, 40) # مثال: 60 مشاهده در سطح 1، 40 در سطح 0
+# expected_probs <- c(0.5, 0.5) # مثال: انتظار توزیع یکنواخت
+# chisq.test(x = observed_freqs, p = expected_probs)
         `,
-        r_code_notes: "<p>پیش‌فرض‌ها مشابه رگرسیون ساده است اما شامل عدم هم‌خطی چندگانه شدید بین متغیرهای مستقل نیز می‌شود (با VIF بررسی کنید).</p><p>اگر متغیرهای مستقل طبقه‌ای دارید، مطمئن شوید که در R به عنوان <code>factor</code> تعریف شده‌اند.</p>"
+        r_code_notes: "<p>این همان آزمون خی‌دو نیکویی برازش عمومی است که برای حالت خاص دو سطح استفاده می‌شود.</p>"
     },
-    test_ancova_or_regression_with_dummies: {
+    info_descriptive_frequencies_binary: { /* مشابه info_descriptive_frequencies اما برای دو سطح */ },
+    test_chi_square_test_of_independence_or_fisher: {
+        question: "آیا در جدول توافقی 2x2 شما، تمام فراوانی‌های مورد انتظار حداقل 5 هستند؟",
+        options: [
+            { text: "بله", nextNode: "test_chi_square_test_of_independence" },
+            { text: "خیر (استفاده از آزمون دقیق فیشر).", nextNode: "test_fisher_exact_test" }
+        ]
+    },
+    test_chi_square_test_of_independence: { /* ... کد از پیام قبلی ... */ },
+    test_fisher_exact_test: {
         isFinal: true,
-        name: "رگرسیون با متغیرهای مستقل پیوسته و طبقه‌ای (ANCOVA به عنوان حالت خاص)",
-        description: "برای بررسی تاثیر متغیرهای مستقل طبقه‌ای و پیوسته بر یک متغیر وابسته پیوسته. ANCOVA به طور خاص به مقایسه میانگین‌های تعدیل شده گروه‌ها پس از کنترل اثر یک یا چند متغیر پیوسته (covariate) می‌پردازد.",
-        whenToUse: "زمانی که می‌خواهید اثر یک یا چند متغیر مستقل طبقه‌ای را بر متغیر وابسته پیوسته بررسی کنید، در حالی که اثر یک یا چند متغیر مستقل پیوسته (covariates) را کنترل می‌کنید. یا به طور کلی، مدلی با ترکیبی از انواع متغیرهای مستقل دارید.",
+        name: "آزمون دقیق فیشر (Fisher's Exact Test)",
+        description: "برای بررسی استقلال دو متغیر طبقه‌ای در جداول توافقی کوچک (معمولاً 2x2) که پیش‌فرض‌های آزمون خی‌دو (فراوانی‌های مورد انتظار بزرگ) برقرار نیست.",
+        whenToUse: "زمانی که حداقل یک سلول در جدول توافقی 2x2 شما فراوانی مورد انتظار کمتر از 5 دارد. این آزمون مقدار p دقیق را محاسبه می‌کند.",
         r_code: `
-model_ancova <- lm(dependent_var ~ covariate_continuous + group_factor, data = data)
-summary(model_ancova)
+# contingency_table یک ماتریس 2x2 از فراوانی‌های مشاهده شده
+# مثال:
+# my_table <- matrix(c(3, 1, 2, 8), nrow = 2, byrow = TRUE)
+# fisher.test(my_table)
         `,
-        r_code_notes: "<p>در ANCOVA، یک پیش‌فرض مهم، همگنی شیب‌های رگرسیون (homogeneity of regression slopes) است، یعنی عدم وجود اثر متقابل معنادار بین همبسته و فاکتور گروه‌بندی. این را با وارد کردن جمله <code>covariate_continuous * group_factor</code> در مدل بررسی کنید.</p><p>اگر همبستگی زیادی بین همبسته(ها) و متغیرهای مستقل طبقه‌ای وجود داشته باشد، تفسیر نتایج دشوار می‌شود.</p>"
+        r_code_notes: "<p>این آزمون برای جداول بزرگتر از 2x2 نیز قابل استفاده است اما محاسبات آن ممکن است سنگین شود (R می‌تواند آن را با شبیه‌سازی انجام دهد).</p>"
     },
-    test_factorial_anova_independent: {
+    test_mcnemar_test: { /* ... کد از پیام قبلی ... */ },
+    test_logistic_regression_simple: { /* ... کد از پیام قبلی ... */ },
+    test_multiple_logistic_regression: { /* ... کد از پیام قبلی ... */ },
+    test_multinomial_logistic_regression: { /* ... کد از پیام قبلی ... */ },
+    test_ordinal_logistic_regression: { /* ... کد از پیام قبلی ... */ },
+    info_descriptive_ordinal_or_gof: {
         isFinal: true,
-        name: "تحلیل واریانس عاملی (بین آزمودنی‌ها) (Factorial ANOVA - Independent Groups)",
-        description: "برای بررسی اثرات اصلی و متقابل دو یا چند متغیر مستقل طبقه‌ای (فاکتور) بر یک متغیر وابسته پیوسته، زمانی که گروه‌ها مستقل هستند.",
-        whenToUse: "زمانی که بیش از یک متغیر مستقل طبقه‌ای دارید و می‌خواهید تاثیر هر یک به تنهایی (اثر اصلی) و تاثیر ترکیب آن‌ها (اثر متقابل) را بر متغیر وابسته پیوسته بررسی کنید. تمام فاکتورها بین آزمودنی هستند (هر آزمودنی فقط در یک ترکیب از سطوح فاکتورها قرار دارد).",
+        name: "آمار توصیفی برای داده‌های ترتیبی یا نیکویی برازش",
+        description: "توصیف توزیع یک متغیر ترتیبی (مانند جداول فراوانی، میانه، مد) یا بررسی اینکه آیا توزیع آن با یک توزیع نظری مطابقت دارد.",
+        whenToUse: "زمانی که می‌خواهید ویژگی‌های اصلی یک متغیر ترتیبی را خلاصه کنید یا آن را با یک توزیع خاص مقایسه کنید.",
         r_code: `
-model <- aov(dependent_var ~ factorA * factorB, data = data)
-summary(model)
+# data$ordinal_var متغیر ترتیبی شما (باید factor مرتب شده باشد)
+# data$ordinal_var <- factor(data$ordinal_var, ordered = TRUE, levels = c("کم", "متوسط", "زیاد"))
+
+# آمار توصیفی
+# print(summary(data$ordinal_var)) # جدول فراوانی
+# print(median(as.numeric(data$ordinal_var))) # میانه (نیاز به تبدیل به عددی با احتیاط)
+
+# برای نیکویی برازش، مشابه آزمون خی‌دو برای متغیرهای طبقه‌ای عمل می‌شود
+# observed_frequencies <- table(data$ordinal_var)
+# expected_probabilities <- c(0.2, 0.5, 0.3) # مثال
+# chisq.test(x = observed_frequencies, p = expected_probabilities)
         `,
-        r_code_notes: "<p><code>factorA * factorB</code> شامل اثرات اصلی factorA، factorB و اثر متقابل factorA:factorB می‌شود.</p><p>پیش‌فرض‌ها مشابه ANOVA یک‌طرفه (نرمال بودن، همسانی واریانس‌ها، استقلال مشاهدات).</p><p>تفسیر اثرات اصلی در حضور اثر متقابل معنادار باید با احتیاط انجام شود.</p>"
+        r_code_notes: "<p>برای آمار توصیفی، جداول فراوانی و درصدها، میانه و مد مناسب هستند. میانگین برای داده‌های ترتیبی معمولاً توصیه نمی‌شود مگر اینکه فواصل بین سطوح برابر فرض شود.</p><p>برای نیکویی برازش، می‌توان از آزمون خی‌دو استفاده کرد، اما به یاد داشته باشید که ترتیب سطوح را در نظر نمی‌گیرد.</p>"
     },
-    test_factorial_anova_repeated_measures: {
-        isFinal: true,
-        name: "تحلیل واریانس عاملی با اندازه‌گیری‌های مکرر (Factorial Repeated Measures ANOVA)",
-        description: "برای بررسی اثرات اصلی و متقابل دو یا چند فاکتور درون‌آزمودنی (within-subjects factors) بر یک متغیر وابسته پیوسته.",
-        whenToUse: "زمانی که بیش از یک فاکتور دارید که همگی به صورت مکرر روی یک گروه از آزمودنی‌ها اندازه‌گیری شده‌اند (مثلاً عملکرد در شرایط مختلف A و در زمان‌های مختلف B).",
-        r_code: `
-library(rstatix)
-model <- anova_test(data = data_long, dv = dependent_var, wid = id, within = c(within_factor1, within_factor2))
-print(model)
-        `,
-        r_code_notes: "<p>داده‌ها باید در فرمت 'long' باشند. هر ردیف یک مشاهده در یک ترکیب از سطوح فاکتورهای درون‌آزمودنی برای یک فرد.</p><p>پیش‌فرض کرویت (sphericity) برای هر اثر درون‌آزمودنی و اثرات متقابل آن‌ها بررسی می‌شود.</p>"
+    test_mann_whitney_or_kruskal_wallis_for_ordinal_dv: {
+        question: "متغیر مستقل طبقه‌ای شما چند سطح دارد؟",
+        options: [
+            { text: "دو سطح (مقایسه دو گروه مستقل)", nextNode: "test_mann_whitney_u" },
+            { text: "سه یا چند سطح (مقایسه چند گروه مستقل)", nextNode: "test_kruskal_wallis" }
+        ]
     },
-    test_mixed_anova: {
+    test_log_linear_model_or_mca: { /* ... کد از پیام قبلی ... */ },
+
+    // ## آزمون‌های مربوط به یک متغیر وابسته شمارشی (Count) ##
+    test_poisson_goodness_of_fit: { /* ... کد از پیام قبلی ... */ },
+    info_descriptive_count: { /* ... کد از پیام قبلی ... */ },
+    test_poisson_regression: { /* ... کد از پیام قبلی ... */ },
+    test_poisson_regression_offset: { /* ... کد از پیام قبلی ... */ },
+    test_negative_binomial_regression: { /* ... کد از پیام قبلی ... */ },
+    test_negative_binomial_regression_offset: { /* ... کد از پیام قبلی ... */ },
+    test_zero_inflated_poisson_or_nb: { /* ... کد از پیام قبلی ... */ },
+    test_zero_inflated_poisson_or_nb_offset: {
         isFinal: true,
-        name: "تحلیل واریانس طرح مختلط (Mixed ANOVA / Split-Plot ANOVA)",
-        description: "برای بررسی اثرات فاکتور(های) بین‌آزمودنی و فاکتور(های) درون‌آزمودنی، و اثرات متقابل آن‌ها بر یک متغیر وابسته پیوسته.",
-        whenToUse: "زمانی که حداقل یک متغیر مستقل طبقه‌ای بین‌آزمودنی (مثلاً گروه درمان و کنترل) و حداقل یک متغیر مستقل طبقه‌ای درون‌آزمودنی (مثلاً اندازه‌گیری در زمان‌های مختلف) دارید.",
+        name: "مدل‌های شمارشی با تورم صفر و متغیر جبرانی (Offset)",
+        description: "برای مدل‌سازی داده‌های شمارشی با تورم صفر که نیاز به لحاظ کردن متغیر جبرانی (offset) برای استانداردسازی نرخ‌ها دارند.",
+        whenToUse: "زمانی که هم تورم صفر دارید و هم دوره مشاهده یا میزان 'قرار گرفتن در معرض' برای هر واحد متفاوت است.",
         r_code: `
-library(rstatix)
-model <- anova_test(data = data_long, dv = dependent_var, wid = id, between = between_factor, within = within_factor)
-print(model)
-        `,
-        r_code_notes: "<p>داده‌ها باید در فرمت 'long' باشند.</p><p>این آزمون اثرات اصلی فاکتور بین‌آزمودنی، فاکتور درون‌آزمودنی، و اثر متقابل آن‌ها را بررسی می‌کند.</p><p>پیش‌فرض کرویت برای اثرات درون‌آزمودنی و همسانی واریانس‌ها برای اثرات بین‌آزمودنی مهم است.</p>"
-    },
-    test_anova_main_effects_only_independent: {
-        isFinal: true,
-        name: "تحلیل واریانس عاملی (فقط اثرات اصلی، گروه‌های مستقل)",
-        description: "برای بررسی اثرات اصلی دو یا چند متغیر مستقل طبقه‌ای (فاکتور) بر یک متغیر وابسته پیوسته، زمانی که گروه‌ها مستقل هستند و فرض می‌شود اثر متقابلی وجود ندارد یا مورد علاقه نیست.",
-        whenToUse: "زمانی که بیش از یک متغیر مستقل طبقه‌ای دارید و فقط می‌خواهید تاثیر هر یک به تنهایی (اثر اصلی) را بر متغیر وابسته پیوسته بررسی کنید و علاقه‌ای به اثر متقابل آن‌ها ندارید یا دلایل نظری برای عدم وجود آن دارید.",
-        r_code: `
-model_main_effects <- aov(dependent_var ~ factorA + factorB, data = data)
-summary(model_main_effects)
-        `,
-        r_code_notes: "<p><code>factorA + factorB</code> فقط اثرات اصلی factorA و factorB را در مدل لحاظ می‌کند.</p><p>این مدل ساده‌تر از مدلی است که شامل اثر متقابل است و تنها در صورتی باید استفاده شود که دلایل قوی برای نادیده گرفتن اثر متقابل وجود داشته باشد.</p>"
-    },
-    test_repeated_measures_anova_main_effects_only: {
-        isFinal: true,
-        name: "ANOVA اندازه‌گیری‌های مکرر (فقط اثرات اصلی)",
-        description: "بررسی اثرات اصلی چند فاکتور درون‌آزمودنی بر متغیر وابسته پیوسته، بدون بررسی اثرات متقابل.",
-        whenToUse: "زمانی که چند فاکتور درون‌آزمودنی دارید و تنها به اثرات اصلی آن‌ها علاقه‌مندید و نه به اثرات متقابل آن‌ها.",
-        r_code: `
-library(rstatix)
-model <- anova_test(data = data_long, dv = dependent_var, wid = id, within = list(within_factor1, within_factor2))
-print(model)
-        `,
-        r_code_notes: "<p>اجرای یک مدل RM ANOVA که فقط اثرات اصلی را بدون اثرات متقابل ارزیابی کند، می‌تواند کمی پیچیده‌تر باشد و اغلب نیاز به استفاده از مدل‌های خطی مختلط (mixed models) دارد.</p><p>روش ارائه شده در کد، ساده‌ترین راه با <code>rstatix</code> است که تمام اثرات (از جمله متقابل) را گزارش می‌دهد و شما باید روی اثرات اصلی تمرکز کنید.</p>"
-    },
-    test_manova: {
-        isFinal: true,
-        name: "تحلیل واریانس چندمتغیره (MANOVA)",
-        description: "برای مقایسه میانگین‌های چندین متغیر وابسته پیوسته بین دو یا چند گروه مستقل (تعریف شده توسط یک متغیر مستقل طبقه‌ای).",
-        whenToUse: "زمانی که بیش از یک متغیر وابسته پیوسته دارید و می‌خواهید تاثیر یک متغیر مستقل طبقه‌ای را بر ترکیب خطی این متغیرهای وابسته بررسی کنید.",
-        r_code: `
-dependent_vars_matrix <- cbind(data$Y1, data$Y2)
-model_manova <- manova(dependent_vars_matrix ~ Group, data = data)
-summary(model_manova, test = "Pillai")
-        `,
-        r_code_notes: "<p><code>cbind()</code> برای ایجاد ماتریس متغیرهای وابسته استفاده می‌شود.</p><p>آماره Pillai's Trace اغلب به عنوان یک آماره قوی (robust) توصیه می‌شود.</p>"
-    },
-    test_factorial_manova: {
-        isFinal: true,
-        name: "تحلیل واریانس چندمتغیره عاملی (Factorial MANOVA)",
-        description: "برای بررسی اثرات اصلی و متقابل دو یا چند متغیر مستقل طبقه‌ای بر چندین متغیر وابسته پیوسته.",
-        whenToUse: "زمانی که بیش از یک متغیر وابسته پیوسته و بیش از یک متغیر مستقل طبقه‌ای دارید و می‌خواهید اثرات اصلی و متقابل فاکتورها را بر ترکیب خطی متغیرهای وابسته بررسی کنید.",
-        r_code: `
-dependent_vars_matrix <- cbind(data$Y1, data$Y2)
-model_factorial_manova <- manova(dependent_vars_matrix ~ FactorA * FactorB, data = data)
-summary(model_factorial_manova, test = "Pillai")
-        `,
-        r_code_notes: "<p><code>FactorA * FactorB</code> شامل اثرات اصلی و اثر متقابل می‌شود.</p><p>پیش‌فرض‌ها مشابه MANOVA یک‌طرفه است.</p>"
-    },
-    test_multivariate_multiple_regression: {
-        isFinal: true,
-        name: "رگرسیون چندگانه چندمتغیره (Multivariate Multiple Regression)",
-        description: "برای بررسی رابطه بین چندین متغیر وابسته پیوسته و چندین متغیر مستقل (پیوسته یا طبقه‌ای).",
-        whenToUse: "زمانی که می‌خواهید تاثیر چندین متغیر مستقل را بر بیش از یک متغیر وابسته پیوسته به طور همزمان مدل‌سازی کنید.",
-        r_code: `
-dependent_vars_matrix <- cbind(data$Y1, data$Y2)
-model_mv_regr <- lm(dependent_vars_matrix ~ X1 + X2, data = data)
-summary(model_mv_regr)
-        `,
-        r_code_notes: "<p>تابع <code>lm()</code> در R می‌تواند یک ماتریس از متغیرهای وابسته را بپذیرد.</p><p>خروجی <code>summary()</code> نتایج رگرسیون را برای هر متغیر وابسته به طور جداگانه نشان می‌دهد.</p>"
-    },
-    test_chi_square_goodness_of_fit: {
-        isFinal: true,
-        name: "آزمون خی‌دو نیکویی برازش (Chi-squared Goodness-of-Fit Test)",
-        description: "برای مقایسه فراوانی‌های مشاهده شده یک متغیر طبقه‌ای با فراوانی‌های مورد انتظار (نظری).",
-        whenToUse: "زمانی که یک متغیر طبقه‌ای دارید و می‌خواهید بدانید آیا توزیع فراوانی آن در نمونه شما با یک توزیع مشخص (مثلاً توزیع یکنواخت یا توزیع مشخص شده از قبل) مطابقت دارد یا خیر.",
-        r_code: `
-observed_frequencies <- table(data$categorical_var)
-chisq.test(x = observed_frequencies, p = rep(1/length(observed_frequencies), length(observed_frequencies)))
-        `,
-        r_code_notes: "<p><code>observed_frequencies</code> یک جدول از فراوانی‌های سطوح متغیر طبقه‌ای شماست.</p><p><code>p</code> یک بردار از احتمالات مورد انتظار برای هر سطح است (باید جمعشان 1 شود).</p>"
-    },
-    info_descriptive_frequencies: {
-        isFinal: true,
-        name: "آمار توصیفی: جداول فراوانی و درصد",
-        description: "برای توصیف توزیع یک متغیر طبقه‌ای.",
-        whenToUse: "زمانی که می‌خواهید فراوانی (تعداد) و درصد هر سطح از یک متغیر طبقه‌ای را نمایش دهید.",
-        r_code: `
-frequency_table <- table(data$categorical_var)
-percentage_table <- prop.table(frequency_table) * 100
-print(frequency_table)
-print(percentage_table)
-        `,
-        r_code_notes: "<p><code>table()</code> فراوانی‌ها را محاسبه می‌کند.</p><p><code>prop.table()</code> نسبت‌ها را محاسبه می‌کند که با ضرب در 100 به درصد تبدیل می‌شوند.</p>"
-    },
-    test_chi_square_test_of_independence: {
-        isFinal: true,
-        name: "آزمون خی‌دو استقلال (Chi-squared Test of Independence)",
-        description: "برای بررسی اینکه آیا ارتباطی بین دو متغیر طبقه‌ای وجود دارد یا خیر.",
-        whenToUse: "زمانی که دو متغیر طبقه‌ای دارید و می‌خواهید بدانید آیا این دو متغیر از یکدیگر مستقل هستند یا با هم ارتباط (association) دارند. برای جداول contingency 2x2 یا بزرگتر.",
-        r_code: `
-contingency_table <- table(data$categorical_var1, data$categorical_var2)
-chisq.test(contingency_table)
-        `,
-        r_code_notes: "<p>ابتدا یک جدول توافقی (crosstabulation) از دو متغیر ایجاد می‌شود.</p><p>پیش‌فرض: تمام فراوانی‌های مورد انتظار باید حداقل 5 باشند.</p>"
-    },
-    test_mcnemar_test: {
-        isFinal: true,
-        name: "آزمون مک‌نمار (McNemar's Test)",
-        description: "برای بررسی تغییر در نسبت‌ها برای داده‌های جفت شده (paired categorical data)، معمولاً برای متغیرهای وابسته دوتایی قبل و بعد از یک مداخله.",
-        whenToUse: "زمانی که یک متغیر طبقه‌ای دوتایی (binary) دارید که دو بار روی یک گروه از افراد یا واحدهای جفت شده اندازه‌گیری شده است.",
-        r_code: `
-mcnemar.test(table(data$before_outcome, data$after_outcome))
-        `,
-        r_code_notes: "<p>این آزمون بر روی سلول‌های خارج از قطر اصلی جدول توافقی تمرکز دارد که نشان‌دهنده تغییر پاسخ‌ها هستند.</p><p>فقط برای داده‌های جفت شده و متغیرهای طبقه‌ای دوتایی مناسب است.</p>"
-    },
-    test_logistic_regression_simple: {
-        isFinal: true,
-        name: "رگرسیون لجستیک ساده (Simple Logistic Regression)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته دوتایی (binary) و یک متغیر مستقل پیوسته.",
-        whenToUse: "زمانی که متغیر وابسته شما دو سطح دارد (مثلاً موفقیت/شکست، بله/خیر) و می‌خواهید تاثیر یک متغیر مستقل پیوسته را بر احتمال وقوع یکی از سطوح متغیر وابسته بررسی کنید.",
-        r_code: `
-model <- glm(binary_dependent_var ~ continuous_independent_var, data = data, family = binomial(link = "logit"))
-summary(model)
-        `,
-        r_code_notes: "<p><code>family = binomial(link = \"logit\")</code> مشخص می‌کند که از مدل لجستیک استفاده شود.</p><p>خروجی شامل ضرایب (log-odds)، خطاهای استاندارد و p-values است.</p>"
-    },
-    test_multiple_logistic_regression: {
-        isFinal: true,
-        name: "رگرسیون لجستیک چندگانه (Multiple Logistic Regression)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته دوتایی و دو یا چند متغیر مستقل (پیوسته یا طبقه‌ای).",
-        whenToUse: "زمانی که متغیر وابسته شما دو سطح دارد و می‌خواهید تاثیر چندین متغیر مستقل را بر احتمال وقوع یکی از سطوح متغیر وابسته بررسی کنید.",
-        r_code: `
-model <- glm(binary_dependent_var ~ independent_var1 + independent_var2 + categorical_ind_var, data = data, family = binomial(link = "logit"))
-summary(model)
-        `,
-        r_code_notes: "<p>مشابه رگرسیون لجستیک ساده، اما با چندین متغیر مستقل.</p><p>به هم‌خطی چندگانه بین متغیرهای مستقل توجه کنید.</p>"
-    },
-    test_logistic_regression_multi_cat_iv: {
-        isFinal: true,
-        name: "رگرسیون لجستیک (با متغیرهای مستقل طبقه‌ای)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته دوتایی و چندین متغیر مستقل که همگی طبقه‌ای هستند.",
-        whenToUse: "زمانی که متغیر وابسته شما دو سطح دارد و تمام متغیرهای مستقل شما طبقه‌ای هستند و می‌خواهید تاثیر آن‌ها را بر احتمال وقوع یکی از سطوح متغیر وابسته بررسی کنید.",
-        r_code: `
-model <- glm(binary_dependent_var ~ cat_iv1 + cat_iv2, data = data, family = binomial(link = "logit"))
-summary(model)
-        `,
-        r_code_notes: "<p>این حالت خاصی از رگرسیون لجستیک چندگانه است که تمام پیش‌بین‌ها طبقه‌ای هستند.</p><p>R به طور خودکار برای متغیرهای فاکتور، متغیرهای ساختگی (dummy variables) ایجاد می‌کند.</p>"
-    },
-    test_multinomial_logistic_regression: {
-        isFinal: true,
-        name: "رگرسیون لجستیک چندجمله‌ای (Multinomial Logistic Regression)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته طبقه‌ای با بیش از دو سطح اسمی (nominal) و یک یا چند متغیر مستقل.",
-        whenToUse: "زمانی که متغیر وابسته شما بیش از دو سطح دارد و این سطوح ترتیب خاصی ندارند (مثلاً انتخاب بین سه برند مختلف).",
-        r_code: `
-library(nnet)
-model <- multinom(multinomial_dv ~ independent_var1 + independent_var2, data = data)
-summary(model)
-        `,
-        r_code_notes: "<p>پکیج <code>nnet</code> (تابع <code>multinom</code>) برای این مدل استفاده می‌شود.</p><p>نتایج به صورت log-odds برای هر سطح از متغیر وابسته نسبت به سطح مرجع ارائه می‌شوند.</p>"
-    },
-    test_ordinal_logistic_regression: {
-        isFinal: true,
-        name: "رگرسیون لجستیک ترتیبی (Ordinal Logistic Regression / Proportional Odds Model)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته طبقه‌ای ترتیبی (ordinal) و یک یا چند متغیر مستقل.",
-        whenToUse: "زمانی که متغیر وابسته شما بیش از دو سطح دارد و این سطوح دارای ترتیب مشخصی هستند (مثلاً سطح رضایت: کم، متوسط، زیاد).",
-        r_code: `
-library(MASS)
-model <- polr(ordinal_dv ~ independent_var1 + independent_var2, data = data, Hess = TRUE)
-summary(model)
-        `,
-        r_code_notes: "<p>پکیج <code>MASS</code> (تابع <code>polr</code>) رایج است.</p><p>این مدل فرض می‌کند که اثر متغیرهای مستقل بر شانس قرار گرفتن در یک سطح یا بالاتر، برای تمام نقاط برش یکسان است.</p>"
-    },
-    test_ordinal_logistic_regression_multi_iv: {
-        isFinal: true,
-        name: "رگرسیون لجستیک ترتیبی (با چندین متغیر مستقل)",
-        description: "برای بررسی رابطه بین یک متغیر وابسته طبقه‌ای ترتیبی (ordinal) و دو یا چند متغیر مستقل (پیوسته یا طبقه‌ای).",
-        whenToUse: "زمانی که متغیر وابسته شما دارای سطوح مرتب است و می‌خواهید تأثیر چندین پیش‌بین را بر آن بررسی کنید.",
-        r_code: `
-library(MASS)
-model <- polr(ordinal_dv ~ independent_var1 + independent_var2 + cat_ind_var, data = data, Hess = TRUE)
-summary(model)
-        `,
-        r_code_notes: "<p>این همان رگرسیون لجستیک ترتیبی است که چندین متغیر مستقل دارد.</p><p>پیش‌فرض proportional odds همچنان پابرجاست و باید بررسی شود.</p>"
-    },
-    test_log_linear_model_or_mca: {
-        isFinal: true,
-        name: "مدل‌های لگاریتمی-خطی (Log-linear Models) یا تحلیل تناظر چندگانه (MCA)",
-        description: "مدل‌های لگاریتمی-خطی برای تحلیل روابط و همبستگی‌ها در جداول توافقی چندبعدی استفاده می‌شوند. تحلیل تناظر چندگانه (MCA) یک روش کاهش بعد برای داده‌های طبقه‌ای است.",
-        whenToUse: "زمانی که بیش از دو متغیر طبقه‌ای دارید و می‌خواهید الگوهای وابستگی بین آن‌ها را بررسی کنید (Log-linear) یا ساختار و روابط بین چندین متغیر طبقه‌ای را با کاهش ابعاد و نمایش بصری بررسی کنید (MCA).",
-        r_code: `
-library(MASS)
-sat_model <- loglm(~ cat_var1*cat_var2*cat_var3, data = my_dataframe_with_factors)
-summary(sat_model)
-        `,
-        r_code_notes: "<p><strong>مدل لگاریتمی-خطی:</strong> برای جداول توافقی با بیش از دو متغیر استفاده می‌شود.</p><p><strong>MCA:</strong> پکیج <code>FactoMineR</code> برای این کار مناسب است.</p>"
-    },
-    test_poisson_goodness_of_fit: {
-        isFinal: true,
-        name: "آزمون نیکویی برازش برای توزیع پواسون",
-        description: "برای بررسی اینکه آیا داده‌های شمارشی از توزیع پواسون با یک نرخ (λ) مشخص پیروی می‌کنند یا خیر.",
-        whenToUse: "زمانی که یک متغیر شمارشی دارید و می‌خواهید بدانید آیا توزیع آن با توزیع پواسون مطابقت دارد.",
-        r_code: `
-library(vcd)
-gf <- goodfit(data$count_variable, type = "poisson", method = "MinChisq")
-summary(gf)
-        `,
-        r_code_notes: "<p>پکیج <code>vcd</code> ابزارهای بهتری برای آزمون نیکویی برازش توزیع‌های شمارشی ارائه می‌دهد.</p>"
-    },
-    info_descriptive_count: {
-        isFinal: true,
-        name: "آمار توصیفی برای داده‌های شمارشی",
-        description: "توصیف توزیع یک متغیر شمارشی (مانند میانگین، واریانس، هیستوگرام).",
-        whenToUse: "زمانی که می‌خواهید ویژگی‌های اصلی یک متغیر شمارشی را خلاصه و نمایش دهید.",
-        r_code: `
-print(paste("Mean:", mean(data$count_variable)))
-print(paste("Variance:", var(data$count_variable)))
-print(summary(data$count_variable))
-        `,
-        r_code_notes: "<p>توابع پایه‌ای R مانند <code>mean()</code>، <code>var()</code>، و <code>summary()</code> برای این کار مفید هستند.</p>"
-    },
-    test_poisson_regression: {
-        isFinal: true,
-        name: "رگرسیون پواسون (Poisson Regression)",
-        description: "برای مدل‌سازی متغیرهای وابسته شمارشی و بررسی تاثیر متغیرهای مستقل بر نرخ شمارش.",
-        whenToUse: "زمانی که متغیر وابسته شما شمارشی است و می‌خواهید تاثیر متغیرهای مستقل را بر آن بررسی کنید.",
-        r_code: `
-model <- glm(count_dependent_var ~ independent_var1 + independent_var2, data = data, family = poisson(link = "log"))
-summary(model)
-        `,
-        r_code_notes: "<p><code>family = poisson(link = \"log\")</code> مشخص می‌کند که از مدل پواسون استفاده شود.</p><p>اگر پراکندگی بیش از حد وجود داشته باشد، مدل دوجمله‌ای منفی مناسب‌تر است.</p>"
-    },
-    test_poisson_regression_offset: {
-        isFinal: true,
-        name: "رگرسیون پواسون با متغیر جبرانی (Offset)",
-        description: "برای مدل‌سازی نرخ شمارش زمانی که دوره مشاهده یا میزان 'قرار گرفتن در معرض' برای هر واحد متفاوت است.",
-        whenToUse: "زمانی که متغیر وابسته شما شمارشی است و این شمارش‌ها در بازه‌های زمانی متفاوت جمع‌آوری شده‌اند.",
-        r_code: `
-model <- glm(count_dependent_var ~ independent_var1 + independent_var2 + offset(log(exposure_variable)), data = data, family = poisson(link = "log"))
-summary(model)
-        `,
-        r_code_notes: "<p>متغیر جبرانی با استفاده از <code>offset()</code> و لگاریتم وارد می‌شود.</p><p>بررسی پراکندگی بیش از حد همچنان مهم است.</p>"
-    },
-    test_negative_binomial_regression: {
-        isFinal: true,
-        name: "رگرسیون دوجمله‌ای منفی (Negative Binomial Regression)",
-        description: "برای مدل‌سازی متغیرهای وابسته شمارشی که پراکندگی بیش از حد (overdispersion) نشان می‌دهند.",
-        whenToUse: "زمانی که مدل رگرسیون پواسون به دلیل پراکندگی بیش از حد مناسب نیست.",
-        r_code: `
-library(MASS)
-model <- glm.nb(count_dependent_var ~ independent_var1 + independent_var2, data = data)
-summary(model)
-        `,
-        r_code_notes: "<p>تابع <code>glm.nb()</code> از پکیج <code>MASS</code> برای این مدل استفاده می‌شود.</p><p>این مدل زمانی مناسب است که واریانس به طور قابل توجهی از میانگین بزرگتر باشد.</p>"
-    },
-    test_negative_binomial_regression_offset: {
-        isFinal: true,
-        name: "رگرسیون دوجمله‌ای منفی با متغیر جبرانی (Offset)",
-        description: "برای مدل‌سازی نرخ شمارش با پراکندگی بیش از حد و با لحاظ کردن دوره مشاهده متفاوت.",
-        whenToUse: "زمانی که هم پراکندگی بیش از حد دارید و هم نیاز به متغیر جبرانی دارید.",
-        r_code: `
-library(MASS)
-model <- glm.nb(count_dependent_var ~ independent_var1 + independent_var2 + offset(log(exposure_variable)), data = data)
-summary(model)
-        `,
-        r_code_notes: "<p>ترکیبی از رگرسیون دوجمله‌ای منفی و متغیر جبرانی.</p>"
-    },
-    test_zero_inflated_poisson_or_nb: {
-        isFinal: true,
-        name: "مدل‌های شمارشی با تورم صفر (Zero-Inflated Poisson/Negative Binomial)",
-        description: "برای مدل‌سازی داده‌های شمارشی که تعداد زیادی صفر بیش از حد انتظار دارند.",
-        whenToUse: "زمانی که تعداد صفرها در متغیر وابسته شمارشی شما بیشتر از حد انتظار باشد.",
-        r_code: `
+# نیاز به پکیج pscl یا glmmTMB
 library(pscl)
-model_example_zinb <- zeroinfl(count_dependent_var ~ var1 | var1, data = data, dist = "negbin")
-summary(model_example_zinb)
+
+# data$count_var متغیر وابسته شمارشی
+# data$exposure_var متغیر جبرانی
+# data$ind_var_count, data$ind_var_zero متغیرهای مستقل برای بخش شمارش و تورم صفر
+
+# مدل پواسون با تورم صفر و offset (ZIP Offset)
+# model_zip_offset <- zeroinfl(count_var ~ ind_var_count + offset(log(exposure_var)) | ind_var_zero,
+#                              data = data,
+#                              dist = "poisson")
+# summary(model_zip_offset)
+
+# مدل دوجمله‌ای منفی با تورم صفر و offset (ZINB Offset)
+# model_zinb_offset <- zeroinfl(count_var ~ ind_var_count + offset(log(exposure_var)) | ind_var_zero,
+#                               data = data,
+#                               dist = "negbin")
+# summary(model_zinb_offset)
         `,
-        r_code_notes: "<p>پکیج <code>pscl</code> (تابع <code>zeroinfl</code>) برای این مدل‌ها استفاده می‌شود.</p><p>انتخاب بین ZIP و ZINB بستگی به پراکندگی دارد.</p>"
+        r_code_notes: "<p>متغیر <code>offset(log(exposure_var))</code> به بخش شمارشی فرمول (قبل از <code>|</code>) اضافه می‌شود.</p><p>انتخاب بین ZIP و ZINB با offset بستگی به وجود پراکندگی بیش از حد (علاوه بر تورم صفر) در بخش شمارشی دارد.</p>"
     }
+
+    // ... (اطمینان حاصل کنید که تمام گره‌های test_... و info_... که در مسیرها به آن‌ها ارجاع داده شده، تعریف شده‌اند) ...
+    // ... (گره‌هایی مانند test_chi_square_goodness_of_fit و بقیه که در پیام قبلی کدشان بود، اینجا باید باشند) ...
+    // ... (من فقط موارد جدیدتر یا اصلاح شده را در اینجا اضافه کردم. شما باید کدهای قبلی را هم داشته باشید) ...
 };
 
-let currentNodeKey = 'start'; // شروع از گره 'start'
+
+// بقیه کد JavaScript (توابع displayNode, resetGuide, copyCodeToClipboard و Event Listeners)
+// دقیقاً همان کدی است که در پیام قبلی (پیام با عنوان "بسیار خب، عالیه! بریم که این پروژه رو حسابی پولیش کنیم...") برایتان ارسال کردم.
+// لطفاً آن بخش را از آن پیام کپی کرده و در اینجا، بعد از پایان آبجکت decisionTree قرار دهید.
+// از خط let currentNodeKey = 'start'; به بعد.
+
+let currentNodeKey = 'start';
+let userPath = [];
 
 function displayNode(nodeKey) {
     const node = decisionTree[nodeKey];
     if (!node) {
-        questionTextElement.textContent = "خطا: گره تعریف نشده است. لطفاً به توسعه‌دهنده اطلاع دهید.";
+        console.error("خطای داخلی: گره با کلید", nodeKey, "یافت نشد. لطفاً ساختار decisionTree را بررسی کنید.");
+        questionTextElement.textContent = "خطا: یک مشکل داخلی رخ داده است. لطفاً به توسعه‌دهنده اطلاع دهید.";
         optionsContainerElement.innerHTML = "";
+        resultContainerElement.classList.add('hidden');
+        userPathContainerElement.classList.add('hidden');
         return;
     }
-
-    currentNodeKey = nodeKey; // ذخیره گره فعلی
+    currentNodeKey = nodeKey;
 
     if (node.isFinal) {
         questionContainerElement.classList.add('hidden');
         resultContainerElement.classList.remove('hidden');
         resetButtonElement.classList.remove('hidden');
-
-        testNameElement.textContent = node.name || "نام آزمون در دسترس نیست";
-        testDescriptionElement.innerHTML = node.description ? node.description.replace(/\n/g, '<br>') : "توضیحات در دسترس نیست.";
-        testWhenToUseElement.innerHTML = node.whenToUse ? node.whenToUse.replace(/\n/g, '<br>') : "اطلاعاتی در مورد زمان استفاده موجود نیست.";
-        
-        rCodeElement.textContent = node.r_code ? node.r_code.trim() : "کد R نمونه موجود نیست.";
+        testNameElement.textContent = node.name || "نام آزمون مشخص نشده";
+        testDescriptionElement.innerHTML = node.description ? node.description.replace(/\n/g, '<br>') : "توضیحات برای این آزمون ارائه نشده است.";
+        testWhenToUseElement.innerHTML = node.whenToUse ? node.whenToUse.replace(/\n/g, '<br>') : "اطلاعاتی در مورد زمان استفاده از این آزمون موجود نیست.";
+        if (node.r_code && node.r_code.trim() !== "") {
+            rCodeElement.textContent = node.r_code.trim();
+            if (typeof Prism !== 'undefined' && Prism.highlightElement) {
+                Prism.highlightElement(rCodeElement);
+            }
+            copyCodeButtonElement.classList.remove('hidden');
+        } else {
+            rCodeElement.textContent = "کد R نمونه برای این آزمون ارائه نشده است.";
+            copyCodeButtonElement.classList.add('hidden');
+        }
         rCodeNotesElement.innerHTML = node.r_code_notes || "";
+        if (userPath.length > 0) {
+            userPathListElement.innerHTML = '';
+            userPath.forEach(stepText => {
+                const listItem = document.createElement('li');
+                listItem.textContent = stepText;
+                userPathListElement.appendChild(listItem);
+            });
+            userPathContainerElement.classList.remove('hidden');
+        } else {
+            userPathContainerElement.classList.add('hidden');
+        }
     } else {
-        questionContainerElement.classList.remove('hidden');
         resultContainerElement.classList.add('hidden');
-        resetButtonElement.classList.add('hidden');
-
+        userPathContainerElement.classList.add('hidden');
+        questionContainerElement.classList.remove('hidden');
+        if (nodeKey !== 'start') {
+             resetButtonElement.classList.remove('hidden');
+        } else {
+            resetButtonElement.classList.add('hidden');
+        }
         questionTextElement.textContent = node.question;
         optionsContainerElement.innerHTML = "";
-
-        node.options.forEach(option => {
-            const button = document.createElement('button');
-            button.textContent = option.text;
-            button.onclick = () => displayNode(option.nextNode);
-            optionsContainerElement.appendChild(button);
-        });
+        if (node.options && node.options.length > 0) {
+            node.options.forEach(option => {
+                const button = document.createElement('button');
+                button.textContent = option.text;
+                button.onclick = () => {
+                    userPath.push(`"${node.question}" ← ${option.text}`);
+                    displayNode(option.nextNode);
+                };
+                optionsContainerElement.appendChild(button);
+            });
+        } else {
+            console.warn("گره سوال", nodeKey, "هیچ گزینه‌ای (options) ندارد.");
+            optionsContainerElement.innerHTML = "<p>گزینه‌ای برای این مرحله تعریف نشده است.</p>";
+        }
     }
 }
 
 function resetGuide() {
-    currentNodeKey = 'start';
+    userPath = [];
+    if (copyButtonTextElement && copyCodeButtonElement) {
+        copyButtonTextElement.textContent = "کپی";
+        copyCodeButtonElement.classList.remove('copied');
+        copyCodeButtonElement.disabled = false;
+    }
     displayNode('start');
 }
 
-function copyCode() {
+function copyCodeToClipboard() {
     const codeToCopy = rCodeElement.innerText;
+    if (!codeToCopy || codeToCopy.trim() === "" || codeToCopy.includes("ارائه نشده است")) {
+        console.warn("محتوایی برای کپی وجود ندارد.");
+        return;
+    }
     navigator.clipboard.writeText(codeToCopy).then(() => {
-        alert('کد R در کلیپ‌بورد کپی شد!');
+        copyButtonTextElement.textContent = 'کپی شد!';
+        copyCodeButtonElement.classList.add('copied');
+        copyCodeButtonElement.disabled = true;
+        setTimeout(() => {
+            copyButtonTextElement.textContent = 'کپی';
+            copyCodeButtonElement.classList.remove('copied');
+            copyCodeButtonElement.disabled = false;
+        }, 2500);
     }).catch(err => {
-        console.error('خطا در کپی کردن کد: ', err);
-        const textArea = document.createElement('textarea');
-        textArea.value = codeToCopy;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        alert('کد R در کلیپ‌بورد کپی شد (روش جایگزین)!');
+        console.warn('خطا در کپی با Clipboard API:', err);
+        try {
+            const textArea = document.createElement('textarea');
+            textArea.value = codeToCopy;
+            textArea.style.position = 'fixed';
+            textArea.style.top = '-9999px';
+            textArea.style.left = '-9999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (successful) {
+                copyButtonTextElement.textContent = 'کپی شد!';
+                copyCodeButtonElement.classList.add('copied');
+                copyCodeButtonElement.disabled = true;
+                setTimeout(() => {
+                    copyButtonTextElement.textContent = 'کپی';
+                    copyCodeButtonElement.classList.remove('copied');
+                    copyCodeButtonElement.disabled = false;
+                }, 2500);
+            } else {
+                throw new Error('کپی با execCommand ناموفق بود.');
+            }
+        } catch (e) {
+            console.error('خطا در کپی با execCommand (fallback):', e);
+            copyButtonTextElement.textContent = 'خطا!';
+        }
     });
 }
 
-// Event Listeners
-resetButtonElement.addEventListener('click', resetGuide);
+if (resetButtonElement) {
+    resetButtonElement.addEventListener('click', resetGuide);
+} else {
+    console.error("دکمه ریست یافت نشد.");
+}
+if (copyCodeButtonElement) {
+    copyCodeButtonElement.addEventListener('click', copyCodeToClipboard);
+} else {
+    console.error("دکمه کپی کد یافت نشد.");
+}
 
-// --- شروع برنامه ---
 document.addEventListener('DOMContentLoaded', () => {
-    if (!questionTextElement || !optionsContainerElement || !resultContainerElement) {
-        console.error('یکی از المنت‌های DOM پیدا نشد. مطمئن شوید IDها در HTML درست تعریف شده‌اند.');
-        return;
-    }
     displayNode('start');
-    if (typeof Prism !== 'undefined') {
-        Prism.highlightElement(rCodeElement);
-    }
 });
