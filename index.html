@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>راهنمای انتخاب آزمون آماری</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- فونت وزیرمتن از گوگل فونت -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;700&display=swap" rel="stylesheet">
+    <!-- برای هایلایت کد R (Prism.js) - اختیاری اما بسیار مفید -->
+    <!-- می‌توانید از CDN دیگری استفاده کنید یا فایل‌ها را دانلود و به پروژه اضافه کنید -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css">
+</head>
+<body>
+    <header>
+        <h1>راهنمای هوشمند انتخاب آزمون آماری</h1>
+        <p>بر اساس منبع ارزشمند <a href="https://stats.oarc.ucla.edu/other/mult-pkg/whatstat/" target="_blank" rel="noopener noreferrer">WhatStat از UCLA</a></p>
+    </header>
+
+    <main>
+        <section id="question-container">
+            <h2 id="question-text">بارگذاری سوالات...</h2>
+            <div id="options-container">
+                <!-- گزینه‌ها اینجا توسط JavaScript قرار می‌گیرند -->
+            </div>
+        </section>
+
+        <section id="result-container" class="hidden">
+            <h2>آزمون پیشنهادی: <span id="test-name"></span></h2>
+            <div id="test-details">
+                <h3>توضیحات:</h3>
+                <p id="test-description"></p>
+                
+                <h3>چه زمانی استفاده می‌شود؟</h3>
+                <p id="test-when-to-use"></p>
+                
+                <h3>کد R نمونه:</h3>
+                <div class="code-block-container">
+                    <button class="copy-button" onclick="copyCode()" title="کپی کد">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                          <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                          <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                        </svg>
+                        <span>کپی</span>
+                    </button>
+                    <pre><code id="r-code" class="language-r"></code></pre>
+                </div>
+                <div id="r-code-notes">
+                    <!-- توضیحات کد R اینجا توسط JavaScript قرار می‌گیرد -->
+                </div>
+            </div>
+        </section>
+        <button id="reset-button" class="hidden">شروع مجدد راهنما</button>
+    </main>
+
+    <footer>
+        <p>
+            ساخته شده با <span class="heart">❤️</span> برای کمک به پژوهشگران. 
+            <a href="https://github.com/your-username/your-repository-name" target="_blank" rel="noopener noreferrer">مشاهده پروژه در گیتهاب</a>
+        </p>
+        <p class="ucla-credit">
+            این راهنما بر اساس جدول و توضیحات صفحه 
+            <a href="https://stats.oarc.ucla.edu/other/mult-pkg/whatstat/" target="_blank" rel="noopener noreferrer">"What statistical analysis should I use?"</a> 
+            از وبسایت OARC، دانشگاه UCLA تهیه شده است.
+        </p>
+    </footer>
+
+    <!-- Prism.js برای هایلایت کد - بخش JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <!-- کامپوننت‌های زبان Prism (حداقل R را اضافه کنید) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-r.min.js"></script>
+    <!-- افزونه کپی به کلیپ‌بورد Prism (اختیاری، چون دکمه کپی خودمان را داریم) -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script> -->
+    
+    <script src="script.js"></script>
+</body>
+</html>
